@@ -1,0 +1,6 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4210
+
+easybuffer.vim - is a simple plugin to quickly switch between buffers using corresponding keys 
+or buffer numbers displayed in easybuffer quick switch window
+
+https://github.com/troydm/easybuffer.vim
