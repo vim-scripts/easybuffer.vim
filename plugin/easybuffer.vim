@@ -1,9 +1,9 @@
 " easybuffer.vim - plugin to quickly switch between buffers
 " Maintainer: Dmitry "troydm" Geurkov <d.geurkov@gmail.com>
-" Version: 0.1.2
+" Version: 0.1.3
 " Description: easybuffer.vim is a simple plugin to quickly
 " switch between buffers by just pressing keys 
-" Last Change: 15 September, 2012
+" Last Change: 16 September, 2012
 " License: Vim License (see :help license)
 " Website: https://github.com/troydm/easybuffer.vim
 "
@@ -14,11 +14,15 @@ let s:save_cpo = &cpo
 set cpo&vim
 
 if !exists("g:easybuffer_chars")
-    let g:easybuffer_chars = ['a','s','f','q','w','e','z','x','c','v']
+    let g:easybuffer_chars = ['a','s','f','w','e','z','x','c','v']
 endif
 
 if !exists("g:easybuffer_bufname")
     let g:easybuffer_bufname = "bname"
+endif
+
+if !exists("g:easybuffer_cursorline")
+    let g:easybuffer_cursorline = 1
 endif
 
 " check for available command
@@ -187,7 +191,7 @@ function! s:KeyPressed(k)
     let matchedk = 0
     let notmatchedbnr = []
     for k in keys(keydict)
-        if match(k,inputl) != -1
+        if match(k,'^'.inputl) != -1
             let matches += 1
             let matchedk = k
         else
@@ -226,7 +230,7 @@ function! s:NumberPressed(n)
     let matchedbnr = 0
     let notmatchedbnr = []
     for bnr in bnrlist
-        if match(''.bnr,input) != -1
+        if match(''.bnr,'^'.input) != -1
             let matches += 1
             let matchedbnr = bnr
         else
@@ -258,6 +262,7 @@ function! s:ListBuffers(unlisted)
     endif
     let keydict = {}
     call setbufvar('%','bnrlist',bnrlist)
+    let prevbnr = getbufvar('%','prevbnr') 
     let maxftwidth = 10
     for bnr in bnrlist
         if len(getbufvar(bnr,'&filetype')) > maxftwidth
@@ -284,7 +289,7 @@ function! s:ListBuffers(unlisted)
                     let kn = 0
                     for k in g:easybuffer_chars
                         if kn
-                            let key = keydict[:-2].k
+                            let key = key[:-2].k
                             let kn = 0
                             break
                         endif
@@ -336,6 +341,9 @@ function! s:ListBuffers(unlisted)
             let bufft = s:StrCenter('-',maxftwidth)
         endif
         call append(line('$'),bnrs.' '.key.'  '.mode.'  '.bufft.'  '.bname)
+        if bnr == prevbnr
+            call cursor(line('$'),0)
+        endif
     endfor
     call setbufvar('%','keydict',keydict)
     match none
@@ -356,6 +364,8 @@ function! s:OpenEasyBuffer(bang,win)
         let unlisted = 1
     endif
     if winnr < 0
+        "set hidden allows unsaved buffers
+        set hidden 
         execute a:win . ' easybuffer'
         setlocal filetype=easybuffer buftype=nofile bufhidden=wipe nobuflisted noswapfile nowrap
         call setbufvar('%','prevbnr',prevbnr)
@@ -363,17 +373,21 @@ function! s:OpenEasyBuffer(bang,win)
         call setbufvar('%','unlisted',unlisted)
         call s:ListBuffers(unlisted)
         setlocal nomodifiable
-        nnoremap <buffer> <Esc> :echo '' \| call <SID>ClearInput()<CR>
-        nnoremap <buffer> d :echo '' \| call <SID>DelBuffer()<CR>
-        nnoremap <buffer> D :echo '' \| call <SID>WipeoutBuffer()<CR>
-        nnoremap <buffer> R :echo '' \| call <SID>Refresh()<CR>
-        nnoremap <buffer> <Enter> :echo '' \| call <SID>EnterPressed()<CR>
+        if g:easybuffer_cursorline
+            setlocal cursorline
+        endif
+        nnoremap <silent> <buffer> <Esc> :call <SID>ClearInput()<CR>
+        nnoremap <silent> <buffer> d :call <SID>DelBuffer()<CR>
+        nnoremap <silent> <buffer> D :call <SID>WipeoutBuffer()<CR>
+        nnoremap <silent> <buffer> R :call <SID>Refresh()<CR>
+        nnoremap <silent> <buffer> q :call <SID>CloseEasyBuffer()<CR>
+        nnoremap <silent> <buffer> <Enter> :call <SID>EnterPressed()<CR>
         for i in range(10)
-            exe 'nnoremap <buffer> '.i." :echo '' \\| call <SID>NumberPressed(".i.")<CR>"
+            exe 'nnoremap <silent> <buffer> '.i." :call <SID>NumberPressed(".i.")<CR>"
         endfor
         for k in g:easybuffer_chars
-            exe 'nnoremap <buffer> '.k." :echo '' \\| call <SID>KeyPressed('".k."')<CR>"
-            exe 'nnoremap <buffer> '.toupper(k)." :echo '' \\| call <SID>KeyPressed('".toupper(k)."')<CR>"
+            exe 'nnoremap <silent> <buffer> '.k." :call <SID>KeyPressed('".k."')<CR>"
+            exe 'nnoremap <silent> <buffer> '.toupper(k)." :call <SID>KeyPressed('".toupper(k)."')<CR>"
         endfor
     else
         exe g:easybuffer_keep.winnr . 'wincmd w'
@@ -383,7 +397,37 @@ function! s:OpenEasyBuffer(bang,win)
     endif
 endfunction
 
+function! s:CloseEasyBuffer() 
+    let prevbnr = getbufvar('%','prevbnr')
+    if !bufexists(prevbnr)
+        let prevbnr = -1
+    endif
+    if bufname(prevbnr) == 'easybuffer'
+        let prevbnr = -1
+    endif
+    if prevbnr == -1
+        if winnr("$") > 1
+            close
+        else
+            echomsg "Cannot close last window"
+        endif
+    else
+        call s:SelectBuf(prevbnr)
+    endif
+endfunction
+
+function! s:ToggleEasyBuffer()
+    let winnr = bufwinnr('^easybuffer$')
+    if winnr == -1
+        call s:OpenEasyBuffer('<bang>',g:easybuffer_keep.'edit')
+    else
+        call s:CloseEasyBuffer()
+    endif
+endfunction
+
 command! -bang EasyBuffer call <SID>OpenEasyBuffer('<bang>',g:easybuffer_keep.'edit')
+command! -bang EasyBufferClose call <SID>CloseEasyBuffer()
+command! -bang EasyBufferToggle call <SID>ToggleEasyBuffer()
 command! -bang EasyBufferHorizontal call <SID>OpenEasyBuffer('<bang>',g:easybuffer_keep.(&lines/2).'sp')
 command! -bang EasyBufferHorizontalBelow call <SID>OpenEasyBuffer('<bang>',g:easybuffer_keep.'belowright '.(&lines/2).'sp')
 command! -bang EasyBufferVertical call <SID>OpenEasyBuffer('<bang>',g:easybuffer_keep.(&columns/2).'vs')
